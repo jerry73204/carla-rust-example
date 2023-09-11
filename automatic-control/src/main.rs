@@ -4,7 +4,7 @@ use carla::{
     rpc::{EpisodeSettings, VehicleAckermannControl},
 };
 use clap::Parser;
-use nalgebra::{UnitQuaternion, Vector3};
+use nalgebra::{UnitQuaternion, Vector3, Translation3, Isometry3};
 use rand::prelude::*;
 use std::{
     sync::{
@@ -41,9 +41,13 @@ fn main() -> Result<()> {
 
     // Choose a start point randomly
     let map = world.map();
-    let spawn_points: Vec<_> = map.recommended_spawn_points().iter().collect();
-    let start_point = spawn_points.choose(&mut rng).unwrap();
 
+    // spawn the vehicle in ...
+    let translation = Translation3::new(83.075226, 13.414804, 0.600000);
+    let rotation = UnitQuaternion::from_euler_angles(0.0000000, 0.000000, -179.840790f32.to_radians());
+
+    let start_point = Isometry3{translation, rotation};
+        
     eprintln!("Spawn a vehicle at {start_point}");
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -61,8 +65,16 @@ fn main() -> Result<()> {
         .blueprint_library()
         .find("vehicle.tesla.model3")
         .unwrap();
-    let vehicle: Vehicle = world.spawn_actor(&vblu, start_point)?.try_into().unwrap();
-    vehicle.set_autopilot(true);
+    let vehicle: Vehicle = world.spawn_actor(&vblu, &start_point)?.try_into().unwrap();
+    vehicle.set_autopilot(false);
+
+    let spectator = world.spectator();
+
+    let translation = Translation3::new(93.075226, 13.414804, 8.600000);
+    let rotation = UnitQuaternion::from_euler_angles(0.000000, -20.000000f32.to_radians(), -179.840790f32.to_radians());
+
+    let s_point = Isometry3{translation, rotation};
+    spectator.set_transform(&s_point);
 
     while !stop.load(Ordering::SeqCst) {
         // Get the current waypoint.
@@ -72,14 +84,14 @@ fn main() -> Result<()> {
         eprintln!("vehicle drives at {vehicle_location}");
 
         let Some(curr_waypoint) = map.waypoint(&vehicle_location) else {
-            vehicle.set_transform(start_point);
+            vehicle.set_transform(&start_point);
             continue;
         };
 
         // Choose a next waypoint randomly
         let next_waypoints: Vec<_> = curr_waypoint.next(1.0).iter().collect();
         let Some(next_waypoint) = next_waypoints.choose(&mut rng) else {
-            vehicle.set_transform(start_point);
+            vehicle.set_transform(&start_point);
             continue;
         };
 

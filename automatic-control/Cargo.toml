@@ -12,4 +12,5 @@ clap = { version = "4.4.2", features = ["derive"] }
 ctrlc = "3.4.1"
 # ggez = "0.9.3"
 nalgebra = "0.32.3"
+noisy_float = "0.2.0"
 rand = "0.8.5"

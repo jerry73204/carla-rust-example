@@ -4,7 +4,7 @@ use carla::{
     rpc::{EpisodeSettings, VehicleAckermannControl},
 };
 use clap::Parser;
-use nalgebra::{UnitQuaternion, Vector3};
+use nalgebra::{UnitQuaternion, Vector3, Translation3, Isometry3};
 use rand::prelude::*;
 use std::{
     sync::{
@@ -41,9 +41,13 @@ fn main() -> Result<()> {
 
     // Choose a start point randomly
     let map = world.map();
-    let spawn_points: Vec<_> = map.recommended_spawn_points().iter().collect();
-    let start_point = spawn_points.choose(&mut rng).unwrap();
 
+    // spawn the vehicle in ...
+    let translation = Translation3::new(83.075226, 13.414804, 0.600000);
+    let rotation = UnitQuaternion::from_euler_angles(0.0000000, 0.000000, -179.840790f32.to_radians());
+
+    let start_point = Isometry3{translation, rotation};
+        
     eprintln!("Spawn a vehicle at {start_point}");
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -61,25 +65,36 @@ fn main() -> Result<()> {
         .blueprint_library()
         .find("vehicle.tesla.model3")
         .unwrap();
-    let vehicle: Vehicle = world.spawn_actor(&vblu, start_point)?.try_into().unwrap();
-    vehicle.set_autopilot(true);
+    let vehicle: Vehicle = world.spawn_actor(&vblu, &start_point)?.try_into().unwrap();
+    vehicle.set_autopilot(false);
+
+    let spectator = world.spectator();
 
     while !stop.load(Ordering::SeqCst) {
         // Get the current waypoint.
         let vehicle_transform = vehicle.transform();
         let vehicle_location = vehicle_transform.translation;
 
-        eprintln!("vehicle drives at {vehicle_location}");
+        let x = vehicle_location.x + 10.0;
+        let y = vehicle_location.y;
+        let z = vehicle_location.z + 7.0;
+        let translation = Translation3::new(x, y, z);
+        let rotation = UnitQuaternion::from_euler_angles(0.000000, -20.000000f32.to_radians(), -179.840790f32.to_radians());
+
+        let s_point = Isometry3{translation, rotation};
+        spectator.set_transform(&s_point);
+
+        // eprintln!("vehicle drives at {vehicle_location}");
 
         let Some(curr_waypoint) = map.waypoint(&vehicle_location) else {
-            vehicle.set_transform(start_point);
+            vehicle.set_transform(&start_point);
             continue;
         };
 
         // Choose a next waypoint randomly
         let next_waypoints: Vec<_> = curr_waypoint.next(1.0).iter().collect();
         let Some(next_waypoint) = next_waypoints.choose(&mut rng) else {
-            vehicle.set_transform(start_point);
+            vehicle.set_transform(&start_point);
             continue;
         };
 
@@ -89,18 +104,19 @@ fn main() -> Result<()> {
 
         // Create a rotation that looks at the direction of `dir`.
         let up = Vector3::z();
-        let target_rot = UnitQuaternion::look_at_lh(&dir, &up);
+        let target_rot = UnitQuaternion::look_at_rh(&dir, &up);
 
+        //TODO: fix degree of heading_offset
         // Compute the angle offset from the vehicle heading to the target direction.
-        let heading_offset = vehicle_transform.rotation.angle_to(&target_rot);
+        let heading_offset = vehicle_transform.rotation.angle_to(&target_rot).to_degrees();
 
         // Compute the steering speed
-        let steer_speed = if heading_offset.abs() < 3f32.to_radians() {
+        let steer_speed = if heading_offset.abs() < 3.0 {
             0.0
         } else if heading_offset > 0.0 {
-            1f32.to_radians()
+            1.0
         } else {
-            -1f32.to_radians()
+            -1.0
         };
 
         // Get the current car speed.
@@ -109,11 +125,13 @@ fn main() -> Result<()> {
         // Compute the acceleration
         let acceleration = if vehicle_speed < 5.0 { 1.0 } else { 0.0 };
 
+
         // Apply the control to the car
         let control = VehicleAckermannControl {
-            steer: heading_offset,
-            steer_speed,
-            speed: opts.target_speed,
+            //TODO: the parameter of 'steer' has bug
+            steer: 0.0,
+            steer_speed: 0.0,
+            speed: opts.target_speed * 10.0 / 36.0,
             acceleration,
             jerk: 0.0,
         };

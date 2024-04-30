@@ -95,7 +95,7 @@ fn main() -> Result<()> {
 
         // Compute the displacement vector from the car to the next
         // waypoint.
-        let next_location = next_waypoint.transofrm().translation;
+        let next_location = next_waypoint.transform().translation;
         let dir = next_location.vector - vehicle_transform.translation.vector;
 
         // Compute the heading offset towards the next waypoint.
